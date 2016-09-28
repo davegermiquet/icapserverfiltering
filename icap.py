@@ -2,7 +2,7 @@
 # -*- coding: utf8 -*-
 
 import random
-import SocketServer
+import socketserver as SocketServer
 
 from icapserverfiltering.pyicap3.pyicap import *
 
