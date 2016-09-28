@@ -2,19 +2,19 @@
 # -*- coding: utf8 -*-
 
 import random
-import SocketServer
+import socketserver as SocketServer
 
-from icapserverfiltering.pyicap3.pyicap import *
+from pyicap3.pyicap import *
 
 class ThreadingSimpleServer(SocketServer.ThreadingMixIn, ICAPServer):
     pass
 
 class ICAPHandler(BaseICAPRequestHandler):
 
-    def example_OPTIONS(self):
+    def example_RESPMOD_OPTIONS(self):
         self.set_icap_response(200)
         self.set_icap_header('Methods', 'RESPMOD')
-        self.set_icap_header('Service', 'PyICAP Server 1.0')
+        self.set_icap_header('Service', 'example_RESPMOD')
         self.set_icap_header('Preview', '0')
         self.set_icap_header('Transfer-Preview', '*')
         self.set_icap_header('Transfer-Ignore', 'jpg,jpeg,gif,png,swf,flv')
@@ -23,7 +23,7 @@ class ICAPHandler(BaseICAPRequestHandler):
         self.set_icap_header('Options-TTL', '3600')
         self.send_headers(False)
 
-    def example_RESPMOD(self):
+    def example_RESPMOD_RESPMOD(self):
         #while True:
         #    chunk = self.read_chunk()
         #    if chunk == '':
@@ -47,7 +47,7 @@ class ICAPHandler(BaseICAPRequestHandler):
         if self.preview:
             prevbuf = ''
             while True:
-                chunk = self.read_chunk()
+                chunk = self.read_chunk().decode("ascii")
                 if chunk == '':
                     break
                 prevbuf += chunk
