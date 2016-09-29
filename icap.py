@@ -11,7 +11,7 @@ class ThreadingSimpleServer(SocketServer.ThreadingMixIn, ICAPServer):
 
 class ICAPHandler(BaseICAPRequestHandler):
 
-    def example_OPTIONS(self):
+    def example_RESMOD_OPTIONS(self):
         self.set_icap_response(200)
         self.set_icap_header('Methods', 'RESPMOD')
         self.set_icap_header('Service', 'example_RESPMOD')
@@ -23,7 +23,7 @@ class ICAPHandler(BaseICAPRequestHandler):
         self.set_icap_header('Options-TTL', '3600')
         self.send_headers(False)
 
-    def example_RESPMOD(self):
+    def example_RESPMOD_RESPMOD(self):
         #while True:
         #    chunk = self.read_chunk()
         #    if chunk == '':
@@ -47,7 +47,7 @@ class ICAPHandler(BaseICAPRequestHandler):
         if self.preview:
             prevbuf = ''
             while True:
-                chunk = self.read_chunk()
+                chunk = self.read_chunk().decode("ascii")
                 if chunk == '':
                     break
                 prevbuf += chunk

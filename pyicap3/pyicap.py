@@ -159,7 +159,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.eob = True
             return ''
 
-        line = self.rfile.readline().decode("ascii")
+        line = self.rfile.readline().decode("utf-8")
         if line == '':
             # Connection was probably closed
             self.eob = True
@@ -179,8 +179,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if len(arr) > 1 and arr[1].strip() == 'ieof':
             self.ieof = True
 
-        value = self.rfile.read(chunk_size)
-        self.rfile.read(2)
+        value = self.rfile.read(chunk_size).decode("utf-8","replace")
+        self.rfile.read(2).decode("utf-8","replace")
 
         if value == '':
             self.eob = True
@@ -194,7 +194,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         be written.
         """
         l = hex(len(data))[2:]
-        self.wfile.write((l + '\r\n' + data + '\r\n').encode("ascii"))
+        self.wfile.write((l + '\r\n' + data + '\r\n').encode("utf-8"))
 
     def cont(self):
         """Send a 100 continue reply
@@ -206,7 +206,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if self.ieof:
             raise ICAPError(500, 'Tried to continue on ieof condition')
 
-        self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n')
+        self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode("ascii"))
 
         self.eob = False
 
@@ -404,7 +404,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         # Parse service name
         # TODO: document "url routing"
         self.log_error(self.request_uri)
-        self.servicename = urlparse.parse_url(self.request_uri)[2].strip('/')
+        self.servicename = urlparse.urlparse(self.request_uri)[2].strip('/')
 
     def handle(self):
         """Handles a connection
@@ -448,7 +448,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.icap_response_code = None
 
         try:
-            self.raw_requestline = self.rfile.readline(65537).decode("ascii")
+            self.raw_requestline = self.rfile.readline(65537).decode("utf-8")
 
             if not self.raw_requestline:
                 self.close_connection = True
