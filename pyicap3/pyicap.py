@@ -458,6 +458,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
             mname = self.servicename + '_' + self.command
             if not hasattr(self, mname):
+                self.log.error(mname)
                 raise ICAPError(404)
 
             method = getattr(self, mname)
