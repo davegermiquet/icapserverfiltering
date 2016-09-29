@@ -4,7 +4,7 @@
 import random
 import socketserver as SocketServer
 
-from icapserverfiltering.pyicap3.pyicap import *
+from pyicap3.pyicap import *
 
 class ThreadingSimpleServer(SocketServer.ThreadingMixIn, ICAPServer):
     pass

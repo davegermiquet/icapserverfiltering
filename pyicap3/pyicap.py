@@ -273,16 +273,16 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if not has_body:
             enc_body = 'null-body='
 
-        if not self.icap_headers.has_key('ISTag'):
+        if 'ISTag' not in self.icap_headers:
             self.set_icap_header('ISTag', '"{0}"'.format(''.join(map(
                 lambda x: random.choice(string.ascii_letters + string.digits),
                 range(30)
             ))))
 
-        if not self.icap_headers.has_key('Date'):
+        if 'Date' not in self.icap_headers:
             self.set_icap_header('Date', self.date_time_string())
 
-        if not self.icap_headers.has_key('Server'):
+        if 'Server' not in self.icap_headers:
             self.set_icap_header('Server', self.version_string())
 
         enc_header_str = enc_req_stat
@@ -384,19 +384,19 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.allow = map(lambda x: x.strip(), self.headers.get('allow', [''])[0].split(','))
 
         if self.command == 'REQMOD':
-            if self.encapsulated.has_key('req-hdr'):
+            if  'req-hdr' in self.encapsulated:
                 self.enc_req = self._read_request()
                 self.enc_req_headers = self._read_headers()
-            if self.encapsulated.has_key('req-body'):
+            if 'req-body' in self.encapsulated:
                 self.has_body = True
         elif self.command == 'RESPMOD':
-            if self.encapsulated.has_key('req-hdr'):
+            if 'req-hdr' in self.encapsulated:
                 self.enc_req = self._read_request()
                 self.enc_req_headers = self._read_headers()
-            if self.encapsulated.has_key('res-hdr'):
+            if 'res-hdr' in self.encapsulated:
                 self.enc_res_status = self._read_status()
                 self.enc_res_headers = self._read_headers()
-            if self.encapsulated.has_key('res-body'):
+            if  'res-body' in self.encapsulated:
                 self.has_body = True
         # Else: OPTIONS. No encapsulation.
 
