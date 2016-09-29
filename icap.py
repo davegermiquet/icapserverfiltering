@@ -47,7 +47,7 @@ class ICAPHandler(BaseICAPRequestHandler):
         if self.preview:
             prevbuf = ''
             while True:
-                chunk = self.read_chunk().decode("ascii")
+                chunk = self.read_chunk()
                 if chunk == '':
                     break
                 prevbuf += chunk
