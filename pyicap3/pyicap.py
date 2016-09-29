@@ -194,7 +194,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         be written.
         """
         l = hex(len(data))[2:]
-        self.wfile.write(l + '\r\n' + data + '\r\n')
+        self.wfile.write((l + '\r\n' + data + '\r\n').encode("ascii"))
 
     def cont(self):
         """Send a 100 continue reply
@@ -532,8 +532,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.set_enc_header('Content-Length', str(len(body)))
         self.send_headers(has_body=True)
         if len(body) > 0:
-            self.write_chunk(body.encode(ascii))
-        self.write_chunk(''.encode("ascii"))
+            self.write_chunk(body)
+        self.write_chunk('')
 
     def log_request(self, code='-', size='-'):
         """Log an accepted request.
