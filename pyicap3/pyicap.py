@@ -310,8 +310,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         icap_header_str += '\r\n'
 
         self.wfile.write(
-            self.icap_response + '\r\n' +
-            icap_header_str + enc_header_str
+            (self.icap_response + '\r\n' +
+            icap_header_str + enc_header_str).encode("ascii")
         )
 
 
@@ -532,8 +532,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.set_enc_header('Content-Length', str(len(body)))
         self.send_headers(has_body=True)
         if len(body) > 0:
-            self.write_chunk(body)
-        self.write_chunk('')
+            self.write_chunk(body.encode(ascii))
+        self.write_chunk(''.encode("ascii"))
 
     def log_request(self, code='-', size='-'):
         """Log an accepted request.
