@@ -12,7 +12,7 @@ import time
 import random
 import socket
 import string
-import urlparse3 as urlparse
+import urllib.parse as urlparse
 import socketserver as SocketServer
 
 class ICAPError(Exception):
@@ -128,17 +128,17 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
     def _read_status(self):
         """Read a HTTP or ICAP status line from input stream"""
-        return self.rfile.readline().strip().split(' ', 2)
+        return self.rfile.readline().decode("ascii").strip().split(' ', 2)
 
     def _read_request(self):
         """Read a HTTP or ICAP request line from input stream"""
-        return self.rfile.readline().strip().split(' ', 2)
+        return self.rfile.readline().decode("ascii").strip().split(' ', 2)
 
     def _read_headers(self):
         """Read a sequence of header lines"""
         headers = {}
         while True:
-            line = self.rfile.readline().strip()
+            line = self.rfile.readline().decode("ascii").strip()
             if line == '':
                 break
             k, v = line.split(':', 1)
@@ -159,7 +159,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.eob = True
             return ''
 
-        line = self.rfile.readline()
+        line = self.rfile.readline().decode("ascii")
         if line == '':
             # Connection was probably closed
             self.eob = True
@@ -321,7 +321,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         The request should be stored in self.raw_requestline; the results
         are in self.command, self.request_uri, self.request_version and
         self.headers.
-
+:w
         Return True for success, False for failure; on failure, an
         error is sent back.
         """
@@ -340,7 +340,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         command, request_uri, version = words
 
-        if version[:5] != 'ICAP/':
+        if  'ICAP/' not in version[:5]:
+            self.log_error(str(version))
             raise ICAPError(400, "Bad request protocol, only accepting ICAP")
 
         if command not in  ['OPTIONS', 'REQMOD', 'RESPMOD']:
@@ -402,7 +403,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         # Parse service name
         # TODO: document "url routing"
-        self.servicename = urlparse.urlparse(self.request_uri)[2].strip('/')
+        self.log_error(self.request_uri)
+        self.servicename = urlparse.parse_url(self.request_uri)[2].strip('/')
 
     def handle(self):
         """Handles a connection
@@ -446,7 +448,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.icap_response_code = None
 
         try:
-            self.raw_requestline = self.rfile.readline(65537)
+            self.raw_requestline = self.rfile.readline(65537).decode("ascii")
 
             if not self.raw_requestline:
                 self.close_connection = True
@@ -470,7 +472,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.close_connection = 1
         except ICAPError as e:
             self.send_error(e.code, e.message)
-        except:
+        except Exception as e:
+            self.log_error(e)
             self.send_error(500)
 
     def send_error(self, code, message=None):
