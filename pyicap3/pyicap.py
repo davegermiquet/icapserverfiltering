@@ -146,7 +146,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             if line == '':
                 break
             k, v = line.split(':', 1)
-            self.log_error(k,v)
+            self.log_error("Headers Values" +k + " ,"+ v)
             headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
         return headers
 
