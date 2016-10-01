@@ -147,8 +147,9 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
             line = line.decode(encoding).strip()
+            self.log_error(line)
             if line == '':
-                break
+                break   
             k, v = line.split(':', 1)
             self.log_error("Headers Values" +k + " ,"+ v)
             headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
