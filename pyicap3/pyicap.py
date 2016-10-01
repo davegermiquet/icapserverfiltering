@@ -142,7 +142,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         while True:
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
-            line = line.decode('encoding').strip()
+            line = line.decode(encoding).strip()
             if line == '':
                 break
             k, v = line.split(':', 1)
