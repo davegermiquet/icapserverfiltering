@@ -12,6 +12,7 @@ import time
 import random
 import socket
 import string
+import chardet
 import urllib.parse as urlparse
 import socketserver as SocketServer
 
@@ -128,17 +129,18 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
     def _read_status(self):
         """Read a HTTP or ICAP status line from input stream"""
-        return self.rfile.readline().decode("ascii").strip().split(' ', 2)
+        dave = self.rfile.readline().decode().strip().split(' ', 2)
+        return dave
 
     def _read_request(self):
-        """Read a HTTP or ICAP request line from input stream"""
-        return self.rfile.readline().decode("ascii").strip().split(' ', 2)
+        dave = self.rfile.readline().decode().strip().split(' ', 2)
+        return dave
 
     def _read_headers(self):
         """Read a sequence of header lines"""
         headers = {}
         while True:
-            line = self.rfile.readline().decode("ascii").strip()
+            line = self.rfile.readline().decode().strip()
             if line == '':
                 break
             k, v = line.split(':', 1)
@@ -158,33 +160,28 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if not self.has_body or self.eob:
             self.eob = True
             return ''
-
-        line = self.rfile.readline().decode("utf-8")
-        if line == '':
-            # Connection was probably closed
-            self.eob = True
-            return ''
-
+        line  = self.rfile.readline()
+        encoding = chardet.detect(line)['encoding']
+        if encoding != None:
+            line = line.decode(encoding)
+        else:
+            line = line.decode()
         line = line.strip()
-
         arr = line.split(';', 1)
 
         chunk_size = 0
         try:
-            chunk_size = int(arr[0], 16)
+            chunk_size = int(arr[0],16)
+            value = self.connection.recv(chunk_size)
+            value  = value + self.connection.recv(2)
         except ValueError:
             raise ICAPError(400, 'Protocol error, could not read chunk')
 
         # Look for ieof chunk extension
         if len(arr) > 1 and arr[1].strip() == 'ieof':
             self.ieof = True
-
-        value = self.rfile.read(chunk_size).decode("utf-8","replace")
-        self.rfile.read(2).decode("utf-8","replace")
-
         if value == '':
             self.eob = True
-
         return value
 
     def write_chunk(self, data):
@@ -193,8 +190,10 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         When finished writing, an empty chunk with data='' must
         be written.
         """
-        l = hex(len(data))[2:]
-        self.wfile.write((l + '\r\n' + data + '\r\n').encode("utf-8"))
+        l = hex(len(data))[2:].encode("ascii")
+        newLine = '\r\n'.encode("ascii")
+        self.wfile.write(l + newLine +  data + newLine)
+
 
     def cont(self):
         """Send a 100 continue reply
@@ -206,7 +205,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if self.ieof:
             raise ICAPError(500, 'Tried to continue on ieof condition')
 
-        self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode("ascii"))
+        self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode())
 
         self.eob = False
 
@@ -321,7 +320,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         The request should be stored in self.raw_requestline; the results
         are in self.command, self.request_uri, self.request_version and
         self.headers.
-:w
+
         Return True for success, False for failure; on failure, an
         error is sent back.
         """
@@ -341,7 +340,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         command, request_uri, version = words
 
         if  'ICAP/' not in version[:5]:
-            self.log_error(str(version))
             raise ICAPError(400, "Bad request protocol, only accepting ICAP")
 
         if command not in  ['OPTIONS', 'REQMOD', 'RESPMOD']:
@@ -361,7 +359,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             version_number = int(version_number[0]), int(version_number[1])
         except (ValueError, IndexError):
             raise ICAPError(400, "Bad request version (%r)" % version)
-
         if version_number != (1, 0):
             raise ICAPError(505, "Invalid ICAP Version (%s)" % base_version_number)
 
@@ -448,12 +445,16 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.icap_response_code = None
 
         try:
-            self.raw_requestline = self.rfile.readline(65537).decode("utf-8")
-
+            self.raw_requestline = self.rfile.readline()
+            encoding = chardet.detect(self.raw_requestline)['encoding']
+            if encoding != None:
+                self.raw_requestline = self.raw_requestline.decode(encoding)
+            else:
+                self.raw_requestline = self.raw_requestline.decode()
             if not self.raw_requestline:
                 self.close_connection = True
+                self.log_error("oh oh")
                 return
-
             self.parse_request()
 
             mname = self.servicename + '_' + self.command
@@ -473,6 +474,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.close_connection = 1
         except ICAPError as e:
             self.send_error(e.code, e.message)
+        except ConnectionResetError as e:
+            return 
         except Exception as e:
             self.log_error(e)
             self.send_error(500)
@@ -630,6 +633,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                         break
             self.set_icap_response(204)
             self.send_headers()
+            self.log_error("got here")
         else:
             # We have to copy everything,
             # but it's sure there's no preview

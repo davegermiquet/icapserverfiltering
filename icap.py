@@ -11,19 +11,19 @@ class ThreadingSimpleServer(SocketServer.ThreadingMixIn, ICAPServer):
 
 class ICAPHandler(BaseICAPRequestHandler):
 
-    def example_RESPMOD_OPTIONS(self):
+    def example_OPTIONS(self):
         self.set_icap_response(200)
         self.set_icap_header('Methods', 'RESPMOD')
         self.set_icap_header('Service', 'example_RESPMOD')
-        self.set_icap_header('Preview', '0')
+        self.set_icap_header('Preview', '1024')
         self.set_icap_header('Transfer-Preview', '*')
-        self.set_icap_header('Transfer-Ignore', 'jpg,jpeg,gif,png,swf,flv')
+        self.set_icap_header('Transfer-Ignore', 'jpg,jpeg,gif,png,swf,flv,gz')
         self.set_icap_header('Transfer-Complete', '')
         self.set_icap_header('Max-Connections', '100')
         self.set_icap_header('Options-TTL', '3600')
         self.send_headers(False)
 
-    def example_RESPMOD_RESPMOD(self):
+    def example_RESPMOD(self):
         #while True:
         #    chunk = self.read_chunk()
         #    if chunk == '':
@@ -50,7 +50,7 @@ class ICAPHandler(BaseICAPRequestHandler):
                 chunk = self.read_chunk()
                 if chunk == '':
                     break
-                prevbuf += chunk
+                prevbuf += str(chunk)
             if self.ieof:
                 self.send_headers(True)
                 if len(prevbuf) > 0:
@@ -63,6 +63,8 @@ class ICAPHandler(BaseICAPRequestHandler):
                 self.write_chunk(prevbuf)
             while True:
                 chunk = self.read_chunk()
+                self.log_error(chunk)
+
                 self.write_chunk(chunk)
                 if chunk == '':
                     break
