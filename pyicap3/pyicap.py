@@ -129,12 +129,16 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
     def _read_status(self):
         """Read a HTTP or ICAP status line from input stream"""
-        dave = self.rfile.readline().decode().strip().split(' ', 2)
-        return dave
+        line = self.rfile.readline()
+        encoding = chardet.detect(line)['encoding']
+        line = line.decode(encoding).strip().split(' ', 2)
+        return line
 
     def _read_request(self):
-        dave = self.rfile.readline().decode().strip().split(' ', 2)
-        return dave
+        line = self.rfile.readline()
+        encoding = chardet.detect(line)['encoding']
+        line = line.decode(encoding).strip().split(' ', 2)
+        return line
 
     def _read_headers(self):
         """Read a sequence of header lines"""
