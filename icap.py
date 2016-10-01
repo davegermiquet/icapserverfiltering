@@ -50,7 +50,7 @@ class ICAPHandler(BaseICAPRequestHandler):
                 chunk = self.read_chunk()
                 if chunk == '':
                     break
-                prevbuf += str(chunk)
+                prevbuf += chunk
             if self.ieof:
                 self.send_headers(True)
                 if len(prevbuf) > 0:
