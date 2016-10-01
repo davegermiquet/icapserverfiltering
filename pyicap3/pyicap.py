@@ -140,10 +140,13 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         """Read a sequence of header lines"""
         headers = {}
         while True:
-            line = self.rfile.readline().decode().strip()
+            line = self.rfile.readline()
+            encoding = chardet.detect(line)['encoding']
+            line = line.decode('encoding').strip()
             if line == '':
                 break
             k, v = line.split(':', 1)
+            self.log_error(k,v)
             headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
         return headers
 
