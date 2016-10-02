@@ -131,27 +131,41 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         """Read a HTTP or ICAP status line from input stream"""
         line = self.rfile.readline()
         encoding = chardet.detect(line)['encoding']
-        line = line.decode(encoding).strip().split(' ', 2)
+        line = line.decode(encoding)
+        if line.strip() == '':
+            line = self.rfile.readline()
+            encoding = chardet.detect(line)['encoding']
+            line = line.decode(encoding)
+        line = line.strip().split(' ', 2)
+        self.log_error(line[1])
         return line
+
 
     def _read_request(self):
         line = self.rfile.readline()
         encoding = chardet.detect(line)['encoding']
-        line = line.decode(encoding).strip().split(' ', 2)
+        line = line.decode(encoding)
+        if line.strip() == '':
+            line = self.rfile.readline()
+            encoding = chardet.detect(line)['encoding']
+            line = line.decode(encoding)
+        line = line.strip().split(' ', 2)
+        self.log_error(line[0])
         return line
 
-    def _read_headers(self):
+    def  _read_headers(self):
         """Read a sequence of header lines"""
         headers = {}
         while True:
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
-            line = line.decode(encoding).strip()
-            if line == '':
+            if encoding:
+                line = line.decode(encoding).strip()
+            else:
+                line = line
+            if not line or line == '' or ':' not in line:
                 break
-            self.log_error(line)
             k, v = line.split(':', 1)
-            self.log_error("Headers Values" +k + " ,"+ v)
             headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
         return headers
 
@@ -168,14 +182,28 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if not self.has_body or self.eob:
             self.eob = True
             return ''
+
         line  = self.rfile.readline()
         encoding = chardet.detect(line)['encoding']
+
         if encoding != None:
-            line = line.decode(encoding)
-        else:
-            line = line.decode()
+            line = line.decode(encoding,"ignore")
+
         line = line.strip()
+        if line == '':
+            line  = self.rfile.readline()
+            encoding = chardet.detect(line)['encoding']
+            line = line.decode(encoding,"replace")
+            line = line.strip()
+
         arr = line.split(';', 1)
+
+        if len(arr) > 1 and arr[1].strip() == 'ieof':
+            self.ieof = True
+            line = self.rfile.readline()
+            encoding = chardet.detect(line)['encoding']
+            line = line.decode(encoding,"replace")
+            line = line.strip()
 
         chunk_size = 0
         try:
@@ -186,10 +214,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             raise ICAPError(400, 'Protocol error, could not read chunk')
 
         # Look for ieof chunk extension
-        if len(arr) > 1 and arr[1].strip() == 'ieof':
-            self.ieof = True
-        if value == '':
-            self.eob = True
         return value
 
     def write_chunk(self, data):
@@ -408,7 +432,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         # Parse service name
         # TODO: document "url routing"
-        self.log_error(self.request_uri)
         self.servicename = urlparse.urlparse(self.request_uri)[2].strip('/')
 
     def handle(self):
@@ -456,12 +479,12 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
-                self.raw_requestline = self.raw_requestline.decode(encoding)
+                self.raw_requestline = self.raw_requestline.decode(encoding,"replace")
             else:
                 self.raw_requestline = self.raw_requestline.decode()
             if not self.raw_requestline:
                 self.close_connection = True
-                self.log_error("oh oh")
+                self.log_error("Lost Connection")
                 return
             self.parse_request()
 
@@ -641,7 +664,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                         break
             self.set_icap_response(204)
             self.send_headers()
-            self.log_error("got here")
         else:
             # We have to copy everything,
             # but it's sure there's no preview
