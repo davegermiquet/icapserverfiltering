@@ -164,7 +164,6 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             line = self.rfile.readline()
             line = line.decode("ascii","replace").strip()
             if line and ":" in line and not line == '':
-                self.log_error(line)
                 k, v = line.split(': ', 1)
                 headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
             else:
