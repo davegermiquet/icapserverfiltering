@@ -93,8 +93,12 @@ class ICAPHandler(BaseICAPRequestHandler):
                     if encoding and chunk.decode(encoding,"replace") == '':
                         break
                 elif chunk == -1:
-                    self.write_chunk(''.encode("ascii"))
+                    try:
+                        self.write_chunk(''.encode("ascii"))
+                    except Exception:
+                        pass
                     break
+
         else:
             self.send_headers(True)
             while True:
@@ -105,7 +109,10 @@ class ICAPHandler(BaseICAPRequestHandler):
                     if encoding and chunk.decode(encoding) == '':
                         break
                 elif chunk == -1:
-                    self.write_chunk(''.encode("ascii"))
+                    try:
+                         self.write_chunk(''.encode("ascii"))
+                    except Exception:
+                        pass
                     break
 
 port = 13440
