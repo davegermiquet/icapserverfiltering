@@ -499,7 +499,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         try:
-            sel.select(1)
+            sel.select(0.5)
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
