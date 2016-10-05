@@ -195,7 +195,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         try:
             self.connection.setblocking(0)
-            sel2.select(0.5)
+            sel2.select(0.3)
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
             if not encoding:
@@ -203,14 +203,13 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
             arr = line.decode(encoding).strip() .split(';', 1)
             if len(arr) > 1 and arr[1].strip() == 'ieof':
-                self.log_error(arr[1])
                 self.ieof = True
 
             chunk_size = int(arr[0], 16)
 
             self.log_error("reading chunk_size " + str(arr[0]))
             if chunk_size > 0:
-                    sel.select(0.5)
+                    sel.select(0.3)
                     value = self.rfile.read(chunk_size)
             else:
                 return -1
@@ -219,13 +218,10 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         except ValueError as e:
             return 0
         except socket.timeout as e:
-            self.log_error("Nothing left to read....ending")
             return -1
         except OSError as e:
-            self.log_error("Nothing left to read")
             return -1
         except ConnectionResetError as e:
-            self.log_error ("Connection lost")
             return -1
         except Exception as e:
             raise ICAPError(400, 'Protocol error, could not read chunk')
@@ -247,7 +243,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
         l = hex(len(data))[2:].encode("ascii")
         newLine = '\r\n'.encode("ascii")
-        sel2.select(0.5)
+        sel2.select(0.3)
         self.wfile.write(l + newLine + data + newLine)
         sel2.unregister(self.wfile.fileno())
     def cont(self):
@@ -262,7 +258,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if self.ieof:
             raise ICAPError(500, 'Tried to continue on ieof condition')
         self.log_error("Continuing")
-        sel2.select(0.5)
+        sel2.select(0.3)
         self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode())
 
         self.eob = False
@@ -499,7 +495,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         try:
-            sel.select(0.5)
+            sel.select(0.3)
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
@@ -702,17 +698,14 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                     self.set_enc_header(h, v)
 
             if not self.has_body:
-                self.log_error("Does not have body")
                 self.send_headers(False)
                 self.log_request(200)
                 return
 
             self.send_headers(True)
             while True:
-                self.log_error("Got here")
                 chunk = self.read_chunk()
                 self.write_chunk(chunk)
-                print("test")
                 encoding = chardet.detect(chunk)['encoding']
                 if chunk.decode(encoding) == '':
                     break
