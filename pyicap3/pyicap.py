@@ -7,6 +7,7 @@ __version__ = "1.0"
 
 __all__ = ['ICAPServer', 'BaseICAPRequestHandler', 'ICAPError']
 
+import selectors
 import sys
 import time
 import random
@@ -16,14 +17,17 @@ import chardet
 import urllib.parse as urlparse
 import socketserver as SocketServer
 
+
 class ICAPError(Exception):
     """Signals a protocol error"""
+
     def __init__(self, code=500, message=None):
         if message == None:
-            message = BaseICAPRequestHandler._responses[code]
+            self.message = BaseICAPRequestHandler._responses[code]
 
         super(ICAPError, self).__init__(message)
         self.code = code
+
 
 class ICAPServer(SocketServer.TCPServer):
     """ICAP Server
@@ -31,6 +35,7 @@ class ICAPServer(SocketServer.TCPServer):
     This is a simple TCPServer, that allows address reuse
     """
     allow_reuse_address = 1
+
 
 class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
     """ICAP request handler base class.
@@ -86,7 +91,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
               'Specified method is invalid for this resource.'),
         406: ('Not Acceptable', 'URI not available in preferred format.'),
         407: ('Proxy Authentication Required', 'You must authenticate with '
-              'this proxy before proceeding.'),
+                                               'this proxy before proceeding.'),
         408: ('Request Timeout', 'Request timed out; try again later.'),
         409: ('Conflict', 'Request conflict.'),
         410: ('Gone',
@@ -124,8 +129,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
     _weekdayname = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     _monthname = [None,
-                 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     def _read_status(self):
         """Read a HTTP or ICAP status line from input stream"""
@@ -137,39 +142,40 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             encoding = chardet.detect(line)['encoding']
             line = line.decode(encoding)
         line = line.strip().split(' ', 2)
-        self.log_error(line[1])
         return line
-
 
     def _read_request(self):
         line = self.rfile.readline()
         encoding = chardet.detect(line)['encoding']
         line = line.decode(encoding)
+
         if line.strip() == '':
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
             line = line.decode(encoding)
+
         line = line.strip().split(' ', 2)
-        self.log_error(line[0])
         return line
 
-    def  _read_headers(self):
+    def _read_headers(self):
         """Read a sequence of header lines"""
         headers = {}
         while True:
             line = self.rfile.readline()
-            encoding = chardet.detect(line)['encoding']
-            if encoding:
-                line = line.decode(encoding).strip()
+            line = line.decode("ascii","replace").strip()
+            if line and ":" in line and not line == '':
+                self.log_error(line)
+                k, v = line.split(': ', 1)
+                headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
             else:
-                line = line
-            if not line or line == '' or ':' not in line:
                 break
-            k, v = line.split(':', 1)
-            headers[k.lower()] = headers.get(k.lower(), []) + [v.strip()]
         return headers
 
     def read_chunk(self):
+        sel = selectors.PollSelector()
+        sel2 = selectors.PollSelector()
+        sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
+        sel2.register(self.rfile.fileno(), selectors.EVENT_READ, self.rfile.readline)
         """Read a HTTP chunk
 
         Also handles the ieof chunk extension defined by the ICAP
@@ -178,42 +184,54 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         chunks will return empty strings.
         """
 
+        value = None
         # Don't try to read when there's no body
-        if not self.has_body or self.eob:
-            self.eob = True
-            return ''
 
-        line  = self.rfile.readline()
-        encoding = chardet.detect(line)['encoding']
+        if not self.has_body:
+            return -1
 
-        if encoding != None:
-            line = line.decode(encoding,"ignore")
-
-        line = line.strip()
-        if line == '':
-            line  = self.rfile.readline()
-            encoding = chardet.detect(line)['encoding']
-            line = line.decode(encoding,"replace")
-            line = line.strip()
-
-        arr = line.split(';', 1)
-
-        if len(arr) > 1 and arr[1].strip() == 'ieof':
-            self.ieof = True
+        try:
+            self.connection.setblocking(0)
+            sel2.select(0.5)
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
-            line = line.decode(encoding,"replace")
-            line = line.strip()
+            if not encoding:
+                raise ValueError("Can't encode")
 
-        chunk_size = 0
-        try:
-            chunk_size = int(arr[0],16)
-            value = self.connection.recv(chunk_size)
-            value  = value + self.connection.recv(2)
-        except ValueError:
+            arr = line.decode(encoding).strip() .split(';', 1)
+            if len(arr) > 1 and arr[1].strip() == 'ieof':
+                self.log_error(arr[1])
+                self.ieof = True
+
+            chunk_size = int(arr[0], 16)
+
+            self.log_error("reading chunk_size " + str(arr[0]))
+            if chunk_size > 0:
+                    sel.select(0.5)
+                    value = self.rfile.read(chunk_size)
+            else:
+                return -1
+        except UnicodeDecodeError as e:
+            return 0
+        except ValueError as e:
+            return 0
+        except socket.timeout as e:
+            self.log_error("Nothing left to read....ending")
+            return -1
+        except OSError as e:
+            self.log_error("Nothing left to read")
+            return -1
+        except ConnectionResetError as e:
+            self.log_error ("Connection lost")
+            return -1
+        except Exception as e:
             raise ICAPError(400, 'Protocol error, could not read chunk')
+        finally:
+            sel.unregister(self.rfile.fileno())
+            sel2.unregister(self.rfile.fileno())
 
-        # Look for ieof chunk extension
+        self.log_error("finished reading")
+
         return value
 
     def write_chunk(self, data):
@@ -222,11 +240,13 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         When finished writing, an empty chunk with data='' must
         be written.
         """
+        sel2 = selectors.SelectSelector()
+        sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
         l = hex(len(data))[2:].encode("ascii")
         newLine = '\r\n'.encode("ascii")
-        self.wfile.write(l + newLine +  data + newLine)
-
-
+        sel2.select(0.5)
+        self.wfile.write(l + newLine + data + newLine)
+        sel2.unregister(self.wfile.fileno())
     def cont(self):
         """Send a 100 continue reply
 
@@ -236,7 +256,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         """
         if self.ieof:
             raise ICAPError(500, 'Tried to continue on ieof condition')
-
+        self.log_error("Continuing")
         self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode())
 
         self.eob = False
@@ -284,7 +304,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         """
         self.icap_headers[header] = self.icap_headers.get(header, []) + [value]
 
-    def send_headers(self, has_body = False):
+    def send_headers(self, has_body=False):
         """Send ICAP and encapsulated headers
 
         Assembles the Encapsulated header, so it's need the information
@@ -337,14 +357,10 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                     self.close_connection = True
                 if k.lower() == 'connection' and v.lower() == 'keep-alive':
                     self.close_connection = False
-
-        icap_header_str += '\r\n'
-
-        self.wfile.write(
-            (self.icap_response + '\r\n' +
-            icap_header_str + enc_header_str).encode("ascii")
-        )
-
+        new_line = '\r\n'
+        icap_header_str += new_line
+        text =  self.icap_response + new_line + icap_header_str + enc_header_str
+        self.wfile.write(text.encode('ascii'))
 
     def parse_request(self):
         """Parse a request (internal).
@@ -371,10 +387,10 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         command, request_uri, version = words
 
-        if  'ICAP/' not in version[:5]:
+        if 'ICAP/' not in version[:5]:
             raise ICAPError(400, "Bad request protocol, only accepting ICAP")
 
-        if command not in  ['OPTIONS', 'REQMOD', 'RESPMOD']:
+        if command not in ['OPTIONS', 'REQMOD', 'RESPMOD']:
             raise ICAPError(501, "command %r is not implemented" % command)
 
         try:
@@ -407,14 +423,14 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if self.command in ['RESPMOD', 'REQMOD']:
             for enc in self.headers.get('encapsulated', [''])[0].split(','):
                 # TODO: raise ICAPError if Encapsulated is malformed or empty
-                k,v = enc.strip().split('=')
+                k, v = enc.strip().split('=')
                 self.encapsulated[k] = int(v)
 
         self.preview = self.headers.get('preview', [None])[0]
         self.allow = map(lambda x: x.strip(), self.headers.get('allow', [''])[0].split(','))
 
         if self.command == 'REQMOD':
-            if  'req-hdr' in self.encapsulated:
+            if 'req-hdr' in self.encapsulated:
                 self.enc_req = self._read_request()
                 self.enc_req_headers = self._read_headers()
             if 'req-body' in self.encapsulated:
@@ -426,10 +442,9 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             if 'res-hdr' in self.encapsulated:
                 self.enc_res_status = self._read_status()
                 self.enc_res_headers = self._read_headers()
-            if  'res-body' in self.encapsulated:
+            if 'res-body' in self.encapsulated:
                 self.has_body = True
         # Else: OPTIONS. No encapsulation.
-
         # Parse service name
         # TODO: document "url routing"
         self.servicename = urlparse.urlparse(self.request_uri)[2].strip('/')
@@ -470,27 +485,29 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         self.icap_headers = {}
         self.enc_headers = {}
-        self.enc_status = None # Seriously, need better names
+        self.enc_status = None  # Seriously, need better names
         self.enc_request = None
 
         self.icap_response_code = None
-
+        sel = selectors.PollSelector()
+        sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         try:
+            sel.select(1)
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
-                self.raw_requestline = self.raw_requestline.decode(encoding,"replace")
+                self.raw_requestline = self.raw_requestline.decode(encoding)
             else:
-                self.raw_requestline = self.raw_requestline.decode()
-            if not self.raw_requestline:
+                self.raw_requestline = self.raw_requestline.decode("ascii")
+
+            if not self.raw_requestline or self.raw_requestline.strip() == '' or \
+                  len(self.raw_requestline.split(' ')) < 3:
                 self.close_connection = True
-                self.log_error("Lost Connection")
                 return
             self.parse_request()
 
             mname = self.servicename + '_' + self.command
             if not hasattr(self, mname):
-                self.log.error(mname)
                 raise ICAPError(404)
 
             method = getattr(self, mname)
@@ -506,7 +523,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         except ICAPError as e:
             self.send_error(e.code, e.message)
         except ConnectionResetError as e:
-            return 
+            return
         except Exception as e:
             self.log_error(e)
             self.send_error(500)
@@ -537,8 +554,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.enc_req = None
         self.enc_res_stats = None
 
-        self.set_icap_response(code) # TODO: message
-        self.set_icap_header('Connection', 'close') # TODO: why?
+        self.set_icap_response(code)  # TODO: message
+        self.set_icap_header('Connection', 'close')  # TODO: why?
         self.send_headers()
 
     def send_enc_error(self, code, message=None, body='', contenttype='text/html'):
@@ -564,7 +581,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         # No encapsulation
         self.enc_req = None
 
-        self.set_icap_response(200) # TODO: message
+        self.set_icap_response(200)  # TODO: message
         self.set_enc_status('HTTP/1.1 %s %s' % (str(code), message))
         self.set_enc_header('Content-Type', contenttype)
         self.set_enc_header('Content-Length', str(len(body)))
@@ -614,7 +631,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sys.stderr.write("%s - - [%s] %s\n" %
                          (self.client_address[0],
                           self.log_date_time_string(),
-                          format%args))
+                          format % args))
 
     def version_string(self):
         """Return the server software version string."""
@@ -626,9 +643,9 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             timestamp = time.time()
         year, month, day, hh, mm, ss, wd, y, z = time.gmtime(timestamp)
         s = "%s, %02d %3s %4d %02d:%02d:%02d GMT" % (
-                self._weekdayname[wd],
-                day, self._monthname[month], year,
-                hh, mm, ss)
+            self._weekdayname[wd],
+            day, self._monthname[month], year,
+            hh, mm, ss)
         return s
 
     def log_date_time_string(self):
@@ -636,7 +653,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         now = time.time()
         year, month, day, hh, mm, ss, x, y, z = time.localtime(now)
         s = "%02d/%3s/%04d %02d:%02d:%02d" % (
-                day, self._monthname[month], year, hh, mm, ss)
+            day, self._monthname[month], year, hh, mm, ss)
         return s
 
     def address_string(self):
@@ -660,8 +677,11 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             # We MUST read everything the client sent us
             if self.has_body:
                 while True:
-                    if self.read_chunk() == '':
+                    chunk = self.read_chunk()
+                    encoding = chardet.detect(chunk)['encoding']
+                    if chunk.decode(encoding) == '':
                         break
+
             self.set_icap_response(204)
             self.send_headers()
         else:
@@ -675,13 +695,17 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                     self.set_enc_header(h, v)
 
             if not self.has_body:
+                self.log_error("Does not have body")
                 self.send_headers(False)
                 self.log_request(200)
                 return
 
             self.send_headers(True)
             while True:
+                self.log_error("Got here")
                 chunk = self.read_chunk()
                 self.write_chunk(chunk)
-                if chunk == '':
+                print("test")
+                encoding = chardet.detect(chunk)['encoding']
+                if chunk.decode(encoding) == '':
                     break
