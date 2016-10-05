@@ -191,7 +191,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         try:
             self.connection.setblocking(0)
-            sel2.select(0.1)
+            sel2.select(0.01)
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
             if not encoding:
@@ -218,14 +218,14 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         except OSError as e:
             return -1
         except ConnectionResetError as e:
+            self.close_connection = 1
             return -1
         except Exception as e:
             raise ICAPError(400, 'Protocol error, could not read chunk')
         finally:
             sel.unregister(self.rfile.fileno())
             sel2.unregister(self.rfile.fileno())
-
-        self.log_error("finished reading")
+            self.log_error("finished reading")
 
         return value
 
@@ -487,10 +487,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.enc_request = None
 
         self.icap_response_code = None
-        sel = selectors.PollSelector()
-        sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         try:
-            sel.select(0.2)
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
@@ -521,9 +518,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         except ICAPError as e:
             self.send_error(e.code, e.message)
         except ConnectionResetError as e:
-            return
+            self.close_connection = 1
         except Exception as e:
-            self.log_error(e)
             self.send_error(500)
 
     def send_error(self, code, message=None):
