@@ -43,7 +43,7 @@ class ICAPHandler(BaseICAPRequestHandler):
                         continue
                 prevbuf += chunk
                 encoding = chardet.detect(chunk)['encoding']
-                if encoding and chunk.decode(encoding) == '':
+                if encoding and chunk.decode(encoding,"replace") == '':
                     break
         return prevbuf
 
