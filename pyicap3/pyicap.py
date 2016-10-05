@@ -205,7 +205,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
             self.log_error("reading chunk_size " + str(arr[0]))
             if chunk_size > 0:
-                    sel.select(0.1)
+                    sel.select(0.05)
                     value = self.rfile.read(chunk_size)
             else:
                 return -1
@@ -239,6 +239,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
         l = hex(len(data))[2:].encode("ascii")
         newLine = '\r\n'.encode("ascii")
+        sel2.select(0.05)
         self.wfile.write(l + newLine + data + newLine)
         sel2.unregister(self.wfile.fileno())
     def cont(self):
