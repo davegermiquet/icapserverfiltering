@@ -163,7 +163,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         while True:
-            sel.select(0.3)
+            sel.select(0.2)
             line = self.rfile.readline()
             line = line.decode("ascii","replace").strip()
             if line and ":" in line and not line == '':
@@ -195,7 +195,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         try:
             self.connection.setblocking(0)
-            sel2.select(0.3)
+            sel2.select(0.2)
             line = self.rfile.readline()
             encoding = chardet.detect(line)['encoding']
             if not encoding:
@@ -209,7 +209,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
             self.log_error("reading chunk_size " + str(arr[0]))
             if chunk_size > 0:
-                    sel.select(0.3)
+                    sel.select(0.2)
                     value = self.rfile.read(chunk_size)
             else:
                 return -1
@@ -243,7 +243,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
         l = hex(len(data))[2:].encode("ascii")
         newLine = '\r\n'.encode("ascii")
-        sel2.select(0.3)
+        sel2.select(0.1)
         self.wfile.write(l + newLine + data + newLine)
         sel2.unregister(self.wfile.fileno())
     def cont(self):
@@ -258,7 +258,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         if self.ieof:
             raise ICAPError(500, 'Tried to continue on ieof condition')
         self.log_error("Continuing")
-        sel2.select(0.3)
+        sel2.select(0.1)
         self.wfile.write('ICAP/1.0 100 Continue\r\n\r\n'.encode())
 
         self.eob = False
@@ -495,7 +495,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         try:
-            sel.select(0.3)
+            sel.select(0.2)
             self.raw_requestline = self.rfile.readline()
             encoding = chardet.detect(self.raw_requestline)['encoding']
             if encoding != None:
@@ -589,9 +589,9 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         self.set_enc_header('Content-Type', contenttype)
         self.set_enc_header('Content-Length', str(len(body)))
         self.send_headers(has_body=True)
-        if len(body) > 0:
+        if len(body.enocde("utf-8")) > 0:
             self.write_chunk(body)
-        self.write_chunk('')
+        self.write_chunk(''.encode("utf-8"))
 
     def log_request(self, code='-', size='-'):
         """Log an accepted request.
@@ -682,7 +682,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                 while True:
                     chunk = self.read_chunk()
                     encoding = chardet.detect(chunk)['encoding']
-                    if chunk.decode(encoding) == '':
+                    if chunk.decode(encoding,"replace") == '':
                         break
 
             self.set_icap_response(204)
@@ -707,5 +707,5 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                 chunk = self.read_chunk()
                 self.write_chunk(chunk)
                 encoding = chardet.detect(chunk)['encoding']
-                if chunk.decode(encoding) == '':
+                if chunk.decode(encoding,"replace") == '':
                     break
