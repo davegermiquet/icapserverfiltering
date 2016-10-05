@@ -175,16 +175,8 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         sel2 = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
         sel2.register(self.rfile.fileno(), selectors.EVENT_READ, self.rfile.readline)
-        """Read a HTTP chunk
-
-        Also handles the ieof chunk extension defined by the ICAP
-        protocol by setting the ieof variable to True. It returns an
-        empty line if the last chunk is read. Reading after the last
-        chunks will return empty strings.
-        """
 
         value = None
-        # Don't try to read when there's no body
 
         if not self.has_body:
             return -1
@@ -210,16 +202,16 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             else:
                 return -1
         except UnicodeDecodeError as e:
-            return 0
+            value = None
         except ValueError as e:
-            return 0
+            value = None
         except socket.timeout as e:
-            return -1
+            value = ''.encode(''.encode('utf-8'))
         except OSError as e:
-            return -1
+            value = ''.encode(''.encode('utf-8'))
         except ConnectionResetError as e:
             self.close_connection = 1
-            return -1
+            value = ''.encode(''.encode('utf-8'))
         except Exception as e:
             raise ICAPError(400, 'Protocol error, could not read chunk')
         finally:
@@ -235,13 +227,17 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         When finished writing, an empty chunk with data='' must
         be written.
         """
-        sel2 = selectors.SelectSelector()
-        sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
-        l = hex(len(data))[2:].encode("ascii")
-        newLine = '\r\n'.encode("ascii")
-        sel2.select(0.05)
-        self.wfile.write(l + newLine + data + newLine)
-        sel2.unregister(self.wfile.fileno())
+        try:
+            sel2 = selectors.SelectSelector()
+            sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
+            l = hex(len(data))[2:].encode("ascii")
+            newLine = '\r\n'.encode("ascii")
+            sel2.select(0.05)
+            self.wfile.write(l + newLine + data + newLine)
+        except BrokenPipeError:
+            self.log_error("Received broken pipe")
+        finally:
+            sel2.unregister(self.wfile.fileno())
     def cont(self):
         """Send a 100 continue reply
 

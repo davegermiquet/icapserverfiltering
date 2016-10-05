@@ -36,11 +36,8 @@ class ICAPHandler(BaseICAPRequestHandler):
                 if self.ieof:
                     self.log_error("found ieof")
                     break
-                if type(chunk) is int:
-                    if chunk == -1:
-                        break
-                    if chunk ==  0:
-                        continue
+                if chunk ==  None:
+                    continue
                 prevbuf += chunk
                 encoding = chardet.detect(chunk)['encoding']
                 if encoding and chunk.decode(encoding,"replace") == '':
@@ -93,12 +90,8 @@ class ICAPHandler(BaseICAPRequestHandler):
                     if encoding and chunk.decode(encoding,"replace") == '':
                         break
                 elif chunk == -1:
-                    try:
-                        self.write_chunk(''.encode("ascii"))
-                    except Exception:
-                        pass
+                    self.write_chunk(''.encode("ascii"))
                     break
-
         else:
             self.send_headers(True)
             while True:
