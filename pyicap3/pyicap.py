@@ -171,6 +171,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         return headers
 
     def read_chunk(self):
+        self.log_error("Reading body")
         sel = selectors.PollSelector()
         sel2 = selectors.PollSelector()
         sel.register(self.rfile.fileno(),  selectors.EVENT_READ, self.rfile.read)
@@ -178,8 +179,9 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
 
         value = None
 
-        if not self.has_body:
-            return -1
+        if not self.has_body or self.eob == True:
+            self.log_error("Found the End")
+            return ''.encode("utf-8")
 
         try:
             self.connection.setblocking(0)
@@ -200,24 +202,29 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
                     sel.select(0.05)
                     value = self.rfile.read(chunk_size)
             else:
-                return -1
+                self.eob = True
+                return ''.encode("utf-8")
+
         except UnicodeDecodeError as e:
             value = None
         except ValueError as e:
             value = None
         except socket.timeout as e:
-            value = ''.encode(''.encode('utf-8'))
+            value = ''.encode('utf-8')
         except OSError as e:
-            value = ''.encode(''.encode('utf-8'))
+            value =''.encode('utf-8')
         except ConnectionResetError as e:
             self.close_connection = 1
-            value = ''.encode(''.encode('utf-8'))
+            value = ''.encode('utf-8')
         except Exception as e:
             raise ICAPError(400, 'Protocol error, could not read chunk')
         finally:
             sel.unregister(self.rfile.fileno())
             sel2.unregister(self.rfile.fileno())
             self.log_error("finished reading")
+
+        if value and value.decode('utf-8','replace') == '':
+            self.eob = True
 
         return value
 
@@ -238,6 +245,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
             self.log_error("Received broken pipe")
         finally:
             sel2.unregister(self.wfile.fileno())
+
     def cont(self):
         """Send a 100 continue reply
 
@@ -245,6 +253,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         to read the entire message body. After this command, read_chunk
         can safely be called again.
         """
+
         sel2 = selectors.SelectSelector()
         sel2.register(self.wfile.fileno(),  selectors.EVENT_WRITE, self.wfile.write)
         if self.ieof:
@@ -517,6 +526,7 @@ class BaseICAPRequestHandler(SocketServer.StreamRequestHandler):
         except ConnectionResetError as e:
             self.close_connection = 1
         except Exception as e:
+            self.log_error(e)
             self.send_error(500)
 
     def send_error(self, code, message=None):

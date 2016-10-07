@@ -29,21 +29,28 @@ class ICAPHandler(BaseICAPRequestHandler):
         if buffer:
             prevbuf = buffer
         else:
-            prevbuf = ''.encode('ascii')
+            prevbuf = ''.encode('utf-8')
 
         while True:
-                chunk = self.read_chunk()
-                if self.ieof:
-                    self.log_error("found ieof")
-                    break
-                if chunk ==  None:
-                    continue
-                prevbuf += chunk
-                encoding = chardet.detect(chunk)['encoding']
-                if encoding and chunk.decode(encoding,"replace") == '':
-                    break
+            chunk = self.read_chunk()
+            if chunk ==  None:
+                continue
+            if self.ieof or self.eob:
+                self.log_error("found end of object         ")
+                break
+            if self.is_it_empty_string(chunk):
+                break
+            prevbuf += chunk
+
+
         return prevbuf
 
+    def is_it_empty_string(self,value):
+        encoding = chardet.detect(value)['encoding']
+        if encoding and value.decode(encoding,"replace") == '':
+            return True
+        if value.decode("utf-8",'ignore') == '':
+            return True
 
     def example_RESPMOD(self):
         #while True:
@@ -70,43 +77,38 @@ class ICAPHandler(BaseICAPRequestHandler):
             self.send_headers(False)
             return
         if self.preview:
-            prevbuf = ''.encode("ascii")
+            prevbuf = ''.encode("utf-8")
             prevbuf = self.handle_preview(prevbuf)
             if self.ieof:
                 self.send_headers(True)
                 if len(prevbuf) > 0:
                     self.write_chunk(prevbuf)
-                self.write_chunk(''.encode("ascii"))
+                self.write_chunk(''.encode("utf-8"))
                 return
             self.cont()
+            self.log_error("Continue")
             self.send_headers(True)
             if len(prevbuf) > 0:
                 self.write_chunk(prevbuf)
             while True:
                 chunk = self.read_chunk()
-                if type(chunk) is not int:
-                    self.write_chunk(chunk)
-                    encoding = chardet.detect(chunk)['encoding']
-                    if encoding and chunk.decode(encoding,"replace") == '':
-                        break
-                elif chunk == -1:
-                    self.write_chunk(''.encode("ascii"))
+                if chunk == None:
+                    continue
+                self.write_chunk(chunk)
+                if self.is_it_empty_string(chunk):
                     break
+
         else:
             self.send_headers(True)
             while True:
                 chunk = self.read_chunk()
-                if type(chunk) is not int:
-                    self.write_chunk(chunk)
-                    encoding = chardet.detect(chunk)['encoding']
-                    if encoding and chunk.decode(encoding) == '':
-                        break
-                elif chunk == -1:
-                    try:
-                         self.write_chunk(''.encode("ascii"))
-                    except Exception:
-                        pass
+                if chunk == None:
+                    continue
+                self.write_chunk(chunk)
+                if self.is_it_empty_string(chunk):
                     break
+
+
 
 port = 13440
 
